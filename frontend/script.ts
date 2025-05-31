@@ -9,15 +9,8 @@ function connectWebSocket() {
 
     ws.onopen = () => {
         console.log('Connected to WebSocket server.');
-        commentaryText.textContent = 'AI接続完了、情報入力待ち...';
-        // 例: 5秒ごとにダミー情報を送信
-        setInterval(() => {
-            const dummyScreenInfo = `現在時刻: ${new Date().toLocaleTimeString()}。
-            何か特定のアプリケーションが実行中...。
-            （実際にはここにOBSのキャプチャ情報を入力）
-            `;
-            // ws.send(dummyScreenInfo); // 実際のアプリケーションでは、ここに実際の画面情報が来る
-        }, 5000);
+        commentaryText.textContent = 'AI接続完了、実況を待機中...';
+        // 画面情報は、robotjs -> OCR Processor -> Backend 経由でやってきます。
     };
 
     ws.onmessage = event => {
@@ -38,15 +31,3 @@ function connectWebSocket() {
 }
 
 connectWebSocket();
-
-// 画面情報を手動で送信する例 (デバッグ用)
-function sendScreenInfoManually(info: string) {
-    if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(info);
-    } else {
-        console.warn("WebSocket is not open. Cannot send info.");
-    }
-}
-
-// デバッグのためにウィンドウにグローバル関数として公開
-(window as any).sendScreenInfoManually = sendScreenInfoManually;
