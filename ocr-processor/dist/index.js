@@ -1,20 +1,51 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 // ocr-processor/src/index.ts
 const vision_1 = require("@google-cloud/vision");
-const ws_1 = __importDefault(require("ws"));
+const ws_1 = __importStar(require("ws")); // WebSocketServer も必要
 const dotenv_1 = __importDefault(require("dotenv"));
-const fs_extra_1 = __importDefault(require("fs-extra"));
-const path_1 = __importDefault(require("path"));
 dotenv_1.default.config();
-// Google Cloud Vision API クライアントの初期化
-// GOOGLE_APPLICATION_CREDENTIALS 環境変数が自動的に認証情報を読み込みます
 const client = new vision_1.ImageAnnotatorClient();
 const BACKEND_WS_URL = process.env.BACKEND_WS_URL || 'ws://localhost:8080';
 let backendWs = null;
+// OCR プロセス自身が WebSocket サーバーとして画像を待ち受けるポート
+const OCR_WS_PORT = process.env.OCR_WS_PORT || 8081;
 function connectToBackend() {
     backendWs = new ws_1.default(BACKEND_WS_URL);
     backendWs.onopen = () => {
@@ -30,20 +61,16 @@ function connectToBackend() {
 }
 connectToBackend();
 /**
- * 画像ファイルからテキストを抽出し、バックエンドに送信する関数
- * @param imagePath スクリーンショット画像のパス
+ * 画像データ (Buffer) からテキストを抽出し、バックエンドに送信する関数
+ * @param imageBuffer スクリーンショット画像データ (Buffer)
  */
-async function performOcrAndSend(imagePath) {
-    if (!fs_extra_1.default.existsSync(imagePath)) {
-        console.error(`Image file not found: ${imagePath}`);
-        return;
-    }
+async function performOcrAndSend(imageBuffer) {
     try {
-        // Vision API で画像からテキストを検出
-        const [result] = await client.textDetection(imagePath);
+        // Vision API で画像からテキストを検出 (直接Bufferを渡す)
+        const [result] = await client.textDetection({ image: { content: imageBuffer.toString('base64') } });
         const detections = result.textAnnotations;
         const extractedText = detections && detections.length > 0 ? detections[0].description : '';
-        console.log('OCR Extracted Text:', extractedText);
+        console.log('OCR Extracted Text:', extractedText?.substring(0, 100) + (extractedText?.length > 100 ? '...' : '')); // 長いテキストは一部表示
         if (backendWs && backendWs.readyState === ws_1.default.OPEN) {
             // 抽出したテキストをバックエンドに送信
             backendWs.send(JSON.stringify({ type: 'screenInfo', text: extractedText }));
@@ -55,58 +82,26 @@ async function performOcrAndSend(imagePath) {
     catch (error) {
         console.error('Error during OCR:', error);
     }
-    finally {
-        // 処理後、画像を削除することも検討
-        // await fs.remove(imagePath);
-    }
 }
-// --- OCR プロセスがスクリーンショットをどのように受け取るか ---
-// 1. HTTP エンドポイントで画像を受け取る場合 (例: OBS スクリプトから POST で送信)
-// バックエンドの index.ts とは別のポートでリッスンさせる
-const express = require('express'); // import express from 'express';
-const app = express();
-const ocrListenPort = process.env.OCR_LISTEN_PORT || 8081;
-app.use(express.json({ limit: '10mb' })); // 大きな画像データに対応
-app.use(express.raw({ type: 'image/*', limit: '10mb' })); // 画像バイナリを受け取る場合
-app.post('/ocr/process-image', async (req, res) => {
-    if (!req.body) {
-        return res.status(400).send('No image data provided.');
-    }
-    const imageBuffer = req.body; // 画像データ (Buffer)
-    const tempImagePath = path_1.default.join(__dirname, `temp_screenshot_${Date.now()}.png`); // 一時ファイル名
-    try {
-        await fs_extra_1.default.writeFile(tempImagePath, imageBuffer);
-        await performOcrAndSend(tempImagePath);
-        res.status(200).send('OCR processed successfully.');
-    }
-    catch (error) {
-        console.error('Error receiving or processing image:', error);
-        res.status(500).send('Failed to process image.');
-    }
-    finally {
-        // 一時ファイルを削除
-        await fs_extra_1.default.remove(tempImagePath).catch(err => console.error("Error removing temp file:", err));
-    }
-});
-app.listen(parseInt(ocrListenPort.toString()), () => {
-    console.log(`OCR Processor HTTP server listening on port ${ocrListenPort}`);
-    console.log(`Send POST request to http://localhost:${ocrListenPort}/ocr/process-image with image data.`);
-});
-// 2. 特定のフォルダを監視し、新しい画像が置かれたら OCR を実行する (非推奨: ポーリングは非効率)
-/*
-const SCREENSHOT_DIR = path.join(__dirname, 'screenshots'); // スクリーンショットが保存されるディレクトリ
-fs.ensureDirSync(SCREENSHOT_DIR); // ディレクトリが存在しない場合は作成
-
-fs.watch(SCREENSHOT_DIR, async (eventType, filename) => {
-    if (filename && eventType === 'rename') { // ファイルが新しく作成されたことを検出
-        const fullPath = path.join(SCREENSHOT_DIR, filename);
-        // ファイルの書き込みが完了するまで少し待つ
-        await new Promise(resolve => setTimeout(resolve, 500));
-        if (fs.existsSync(fullPath)) {
-            console.log(`New screenshot detected: ${fullPath}`);
-            performOcrAndSend(fullPath);
+// OCR プロセスがスクリーンショットキャプチャプロセスから画像を受け取るための WebSocket サーバー
+const wssOcr = new ws_1.WebSocketServer({ port: parseInt(OCR_WS_PORT.toString()) });
+wssOcr.on('connection', ws => {
+    console.log('Screenshot Capture Process connected to OCR WebSocket.');
+    ws.on('message', async (message) => {
+        // message は Buffer (バイナリデータ) として送られてくる
+        if (Buffer.isBuffer(message)) {
+            console.log(`Received image data from screenshot capture process (${message.length} bytes).`);
+            await performOcrAndSend(message);
         }
-    }
+        else {
+            console.warn('Received non-binary message from screenshot capture process:', message.toString());
+        }
+    });
+    ws.on('close', () => {
+        console.log('Screenshot Capture Process disconnected from OCR WebSocket.');
+    });
+    ws.on('error', error => {
+        console.error('OCR WebSocket server error:', error);
+    });
 });
-console.log(`Monitoring directory for screenshots: ${SCREENSHOT_DIR}`);
-*/
+console.log(`OCR Processor WebSocket server started on port ${OCR_WS_PORT}`);
