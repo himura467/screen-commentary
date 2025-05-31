@@ -26,12 +26,31 @@ wss.on('connection', ws => {
     console.log('Client connected to WebSocket.');
 
     ws.on('message', async message => {
-        console.log('Received from client:', message.toString());
-        const screenInfo = message.toString(); // クライアントから送られてきた画面情報
+        const messageString = message.toString();
+        console.log('Received from client/OCR:', messageString);
+
+        let screenInfo = '';
+        try {
+            const parsedMessage = JSON.parse(messageString);
+            if (parsedMessage.type === 'screenInfo' && typeof parsedMessage.text === 'string') {
+                screenInfo = parsedMessage.text;
+            } else {
+                // 想定外の形式、またはOBS Browser Sourceからの直接メッセージとして扱う
+                screenInfo = messageString;
+            }
+        } catch (e) {
+            // JSON 形式でない場合は、そのまま画面情報として扱う（OBS Browser Sourceからの生のメッセージなど）
+            screenInfo = messageString;
+        }
+
+        if (!screenInfo) {
+            console.log('No valid screen information received for commentary generation.');
+            return;
+        }
 
         try {
             // Gemini APIを呼び出して実況テキストを生成
-            const prompt = `以下のPC画面の情報に基づいて、面白く、簡潔な実況コメントを生成してください。
+            const prompt = `以下のPC画面の情報を元に、短く、面白く、魅力的な実況コメントを生成してください。
             情報: ${screenInfo}
             `;
             const result = await model.generateContent(prompt);
@@ -39,10 +58,11 @@ wss.on('connection', ws => {
             const commentary = response.text();
 
             console.log('Generated commentary:', commentary);
-            ws.send(commentary); // 実況テキストをクライアントに送信
+            // フロントエンド (OBS Browser Source) に実況テキストを送信
+            ws.send(commentary);
         } catch (error) {
             console.error('Error generating commentary:', error);
-            ws.send('エラーが発生しました。');
+            ws.send('AI実況生成中にエラーが発生しました。');
         }
     });
 
