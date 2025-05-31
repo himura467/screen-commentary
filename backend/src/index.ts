@@ -17,7 +17,7 @@ if (!GEMINI_API_KEY) {
     process.exit(1);
 }
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-pro" }); // または "gemini-1.5-pro" など
+const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
 // WebSocketサーバーの設定
 const wss = new WebSocketServer({ port: parseInt(wsPort.toString()) });
