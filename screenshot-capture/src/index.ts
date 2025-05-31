@@ -41,8 +41,12 @@ async function takeScreenshotAndSend() {
 
     try {
         // robotjs でスクリーンショットを撮る
-        // `screen.width`, `screen.height` はプライマリスクリーン全体のサイズ
-        const screenshot = robot.screen.capture(0, 0, robot.screen.width, robot.screen.height);
+        // robot.getScreenSize() を使用して画面の幅と高さを取得します
+        const screenSize = robot.getScreenSize();
+        const width = screenSize.width;
+        const height = screenSize.height;
+
+        const screenshot = robot.screen.capture(0, 0, width, height);
 
         // robotjs の画像データ (Raw RGBA) を PNG に変換
         const png = new PNG({
@@ -53,6 +57,7 @@ async function takeScreenshotAndSend() {
         });
 
         // robotjs の画像データは BGRx 形式なので、RGBA に変換する必要がある
+        // BGRx to RGBA
         for (let i = 0; i < screenshot.image.length; i += 4) {
             png.data[i] = screenshot.image[i + 2];     // Red
             png.data[i + 1] = screenshot.image[i + 1]; // Green
