@@ -1,0 +1,27 @@
+/* frontend/style.css */
+body {
+    margin: 0;
+    overflow: hidden; /* OBSで背景を透過させるため */
+    background-color: transparent; /* OBSで背景を透過させるため */
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    color: white; /* テキストの色 */
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7); /* 読みやすくするための影 */
+}
+
+#commentary-container {
+    position: absolute;
+    bottom: 20px; /* 画面下からの位置 */
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: rgba(0, 0, 0, 0.5); /* 半透明の背景 */
+    padding: 15px 30px;
+    border-radius: 10px;
+    max-width: 80%;
+    text-align: center;
+}
+
+#commentary-text {
+    margin: 0;
+    font-size: 2em; /* フォントサイズを調整 */
+    white-space: pre-wrap; /* 改行を有効にする */
+}
