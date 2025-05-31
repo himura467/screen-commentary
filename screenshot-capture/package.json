@@ -16,5 +16,11 @@
     "pngjs": "^7.0.0",
     "robotjs": "^0.6.0",
     "ws": "^8.18.2"
+  },
+  "devDependencies": {
+    "@types/fs-extra": "^11.0.4",
+    "@types/node": "^22.15.29",
+    "@types/pngjs": "^6.0.5",
+    "@types/ws": "^8.18.1"
   }
 }
